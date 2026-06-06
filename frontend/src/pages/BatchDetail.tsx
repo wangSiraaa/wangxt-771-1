@@ -20,7 +20,60 @@ export default function BatchDetail() {
   const [activeTab, setActiveTab] = useState('info');
   const [showWitnessModal, setShowWitnessModal] = useState(false);
   const [showSealModal, setShowSealModal] = useState(false);
+  const [showLockModal, setShowLockModal] = useState(false);
+  const [showUnlockModal, setShowUnlockModal] = useState(false);
+  const [lockReason, setLockReason] = useState('');
+  const [unlockReason, setUnlockReason] = useState('');
   const [message, setMessage] = useState<{ type: string; text: string } | null>(null);
+
+  const canLock = () => {
+    if (!batch) return false;
+    const validStatuses = ['WITNESSED', 'SUBMITTED', 'RECTIFICATION'];
+    return validStatuses.includes(batch.status) && !batch.isWitnessLocked;
+  };
+
+  const canUnlock = () => {
+    if (!batch) return false;
+    return batch.isWitnessLocked;
+  };
+
+  const handleLock = async () => {
+    if (!id) return;
+    try {
+      const res = await batchesApi.witnessLock(id, {
+        reason: lockReason || undefined,
+      });
+      if (res.data.success) {
+        setMessage({ type: 'success', text: '见证锁定成功' });
+        setShowLockModal(false);
+        setLockReason('');
+        loadBatch();
+      } else {
+        setMessage({ type: 'error', text: res.data.message || '锁定失败' });
+      }
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.response?.data?.message || '锁定失败' });
+    }
+  };
+
+  const handleUnlock = async () => {
+    if (!id) return;
+    try {
+      const res = await batchesApi.witnessUnlock(id, {
+        reason: unlockReason,
+      });
+      if (res.data.success) {
+        setMessage({ type: 'success', text: '见证撤锁成功' });
+        setShowUnlockModal(false);
+        setUnlockReason('');
+        loadBatch();
+      } else {
+        setMessage({ type: 'error', text: res.data.message || '撤锁失败' });
+      }
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.response?.data?.message || '撤锁失败' });
+    }
+  };
 
   const [witnessForm, setWitnessForm] = useState({
     witnessDate: '',
@@ -144,9 +197,28 @@ export default function BatchDetail() {
           <span className={"status-tag status-" + batch.status} style={{ marginLeft: 12 }}>
             {statusMap[batch.status]}
           </span>
+          {batch.isWitnessLocked ? (
+            <span className="status-tag" style={{ marginLeft: 8, background: '#fff2e8', color: '#fa8c16', borderColor: '#ffd591' }}>
+              🔒 已锁定
+            </span>
+          ) : (
+            <span className="status-tag" style={{ marginLeft: 8, background: '#f6ffed', color: '#52c41a', borderColor: '#b7eb8f' }}>
+              🔓 未锁定
+            </span>
+          )}
         </div>
         <div>
-          {batch.status === 'WITNESSED' && (
+          {canLock() && (
+            <button className="btn btn-warning" onClick={() => setShowLockModal(true)} style={{ marginRight: 8 }}>
+              🔒 见证锁定
+            </button>
+          )}
+          {canUnlock() && (
+            <button className="btn btn-primary" onClick={() => setShowUnlockModal(true)} style={{ marginRight: 8 }}>
+              🔓 见证撤锁
+            </button>
+          )}
+          {batch.status === 'WITNESSED' && !batch.isWitnessLocked && (
             <button className="btn btn-primary" onClick={() => setShowSealModal(true)} style={{ marginRight: 8 }}>
               创建封签
             </button>
@@ -256,6 +328,36 @@ export default function BatchDetail() {
               <span className="label">归档状态</span>
               <span className="value">{batch.isArchived ? '已归档' : '未归档'}</span>
             </div>
+            <div className="detail-item">
+              <span className="label">见证锁定状态</span>
+              <span className="value">
+                {batch.isWitnessLocked ? (
+                  <span style={{ color: '#fa8c16', fontWeight: 'bold' }}>🔒 已锁定</span>
+                ) : (
+                  <span style={{ color: '#52c41a', fontWeight: 'bold' }}>🔓 未锁定</span>
+                )}
+              </span>
+            </div>
+            {batch.isWitnessLocked && batch.witnessLockedAt && (
+              <>
+                <div className="detail-item">
+                  <span className="label">锁定时间</span>
+                  <span className="value">{new Date(batch.witnessLockedAt).toLocaleString()}</span>
+                </div>
+                {batch.witnessLockReason && (
+                  <div className="detail-item">
+                    <span className="label">锁定原因</span>
+                    <span className="value">{batch.witnessLockReason}</span>
+                  </div>
+                )}
+              </>
+            )}
+            {batch.witnessUnlockReason && (
+              <div className="detail-item">
+                <span className="label">上次撤锁原因</span>
+                <span className="value">{batch.witnessUnlockReason}</span>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -554,6 +656,72 @@ export default function BatchDetail() {
             <div className="modal-footer">
               <button className="btn btn-default" onClick={() => setShowSealModal(false)}>取消</button>
               <button className="btn btn-primary" onClick={handleCreateSeal}>创建封签</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showLockModal && batch && (
+        <div className="modal-overlay" onClick={() => setShowLockModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title">见证锁定 - {batch.batchNo}</h3>
+              <button className="modal-close" onClick={() => setShowLockModal(false)}>×</button>
+            </div>
+            <div style={{ padding: '16px 0' }}>
+              <p>确定要锁定该批次吗？锁定后将冻结样品号、封签照片和送检委托。</p>
+              <div className="form-group">
+                <label>锁定原因（可选）</label>
+                <textarea
+                  value={lockReason}
+                  onChange={(e) => setLockReason(e.target.value)}
+                  placeholder="请输入锁定原因"
+                  rows={3}
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-default" onClick={() => setShowLockModal(false)}>
+                取消
+              </button>
+              <button className="btn btn-warning" onClick={handleLock}>
+                确认锁定
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showUnlockModal && batch && (
+        <div className="modal-overlay" onClick={() => setShowUnlockModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title">见证撤锁 - {batch.batchNo}</h3>
+              <button className="modal-close" onClick={() => setShowUnlockModal(false)}>×</button>
+            </div>
+            <div style={{ padding: '16px 0' }}>
+              <p>确定要撤锁该批次吗？撤锁后将允许修改样品号、封签照片和送检委托。</p>
+              <div className="form-group">
+                <label>撤锁原因 *</label>
+                <textarea
+                  value={unlockReason}
+                  onChange={(e) => setUnlockReason(e.target.value)}
+                  placeholder="请输入撤锁原因（必填）"
+                  rows={3}
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-default" onClick={() => setShowUnlockModal(false)}>
+                取消
+              </button>
+              <button 
+                className="btn btn-primary" 
+                onClick={handleUnlock}
+                disabled={!unlockReason.trim()}
+              >
+                确认撤锁
+              </button>
             </div>
           </div>
         </div>

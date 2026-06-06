@@ -22,6 +22,10 @@ export const batchesApi = {
   getById: (id: string) => api.get<ApiResponse<MaterialBatch>>(`/batches/${id}`),
   create: (data: any) => api.post<ApiResponse<MaterialBatch>>('/batches', data),
   archive: (id: string) => api.post<ApiResponse<MaterialBatch>>(`/batches/${id}/archive`),
+  witnessLock: (id: string, data?: { reason?: string }) => 
+    api.post<ApiResponse<MaterialBatch>>(`/batches/${id}/witness-lock`, data),
+  witnessUnlock: (id: string, data: { reason: string }) => 
+    api.post<ApiResponse<MaterialBatch>>(`/batches/${id}/witness-unlock`, data),
 };
 
 export const witnessApi = {

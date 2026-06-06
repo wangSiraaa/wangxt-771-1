@@ -8,6 +8,8 @@ let testSampleSeal2Id = null;
 let testInspectionOrderId = null;
 let testReportId = null;
 let testRectificationId = null;
+let testLockBatchId = null;
+let testNoPhotoBatchId = null;
 
 let passedCount = 0;
 let failedCount = 0;
@@ -286,6 +288,225 @@ async function runAcceptanceTests() {
     logResult('查询操作日志', false, error.message);
   }
 
+  logStep('16', '核心测试：见证锁定功能 - 创建测试批次（有见证照片）');
+  try {
+    const batchNo = `TEST-LOCK-${Date.now()}`;
+    const res = await axios.post(`${API_BASE}/batches`, {
+      batchNo: batchNo,
+      materialName: '见证锁定测试钢筋',
+      materialType: '建筑钢材',
+      specification: 'HRB400 Φ16',
+      quantity: 30,
+      unit: '吨',
+      supplier: '测试钢厂',
+      arrivalDate: '2024-01-20',
+      constructionSite: '锁定测试工地',
+    });
+
+    testLockBatchId = res.data.data.id;
+    logResult('创建锁定测试批次成功', true, `批次ID: ${testLockBatchId}`);
+  } catch (error) {
+    logResult('创建锁定测试批次', false, error.response?.data?.message || error.message);
+  }
+
+  logStep('17', '核心测试：为锁定测试批次创建监理见证记录（含照片）');
+  try {
+    const res = await axios.post(`${API_BASE}/witness`, {
+      batchId: testLockBatchId,
+      witnessDate: '2024-01-21',
+      sitePhotos: ['/photos/lock-test-1.jpg', '/photos/lock-test-2.jpg'],
+      remarks: '见证锁定测试见证',
+    });
+
+    logResult('创建见证记录成功', true, `见证ID: ${res.data.data.id}`);
+  } catch (error) {
+    logResult('创建见证记录', false, error.response?.data?.message || error.message);
+  }
+
+  logStep('18', '核心测试：同一批次下样品号唯一性验证（锁定前创建封签）');
+  try {
+    const res = await axios.post(`${API_BASE}/sample-seals`, {
+      batchId: testLockBatchId,
+      sampleNo: 'LOCK-S001',
+      sampleName: '锁定测试试样-1',
+      quantity: 2,
+      samplingPoint: '测试现场',
+      samplingDate: '2024-01-21',
+    });
+
+    logResult('创建封签 LOCK-S001 成功', true, `封签ID: ${res.data.data.id}`);
+  } catch (error) {
+    logResult('创建封签 LOCK-S001', false, error.response?.data?.message || error.message);
+  }
+
+  logStep('19', '核心测试：同一批次下重复样品号应该失败（验证样品号唯一性）');
+  try {
+    await axios.post(`${API_BASE}/sample-seals`, {
+      batchId: testLockBatchId,
+      sampleNo: 'LOCK-S001',
+      sampleName: '锁定测试试样-重复',
+      quantity: 2,
+      samplingPoint: '测试现场2',
+      samplingDate: '2024-01-21',
+    });
+
+    logResult('重复样品号 LOCK-S001 应该被拒绝', false, '错误：服务器接受了重复的样品号！');
+  } catch (error) {
+    const status = error.response?.status;
+    const message = error.response?.data?.message || '';
+    
+    const isRejected = status === 400 && message.includes('已存在');
+    logResult('重复样品号 LOCK-S001 被正确拒绝', isRejected, 
+      isRejected ? `状态码: ${status}, 消息: ${message}` : `意外响应: 状态${status}`);
+  }
+
+  logStep('20', '核心测试：执行见证锁定');
+  try {
+    const res = await axios.post(`${API_BASE}/batches/${testLockBatchId}/witness-lock`, {
+      reason: '测试见证锁定功能',
+    });
+
+    logResult('见证锁定成功', true, `锁定状态: ${res.data.data.isWitnessLocked}`);
+    logResult('批次锁定状态正确', res.data.data.isWitnessLocked === true, '');
+    logResult('锁定人已记录', res.data.data.witnessLockedBy != null, '');
+    logResult('锁定时间已记录', res.data.data.witnessLockedAt != null, '');
+  } catch (error) {
+    logResult('见证锁定', false, error.response?.data?.message || error.message);
+  }
+
+  logStep('21', '核心测试：锁定后验证批次、样品、送检单锁定状态一致性');
+  try {
+    const res = await axios.get(`${API_BASE}/batches/${testLockBatchId}`);
+    const batch = res.data.data;
+    
+    logResult('批次锁定状态一致', batch.isWitnessLocked === true, '');
+    
+    const samplesLocked = batch.sampleSeals.every(s => s.isWitnessLocked === true);
+    logResult('所有样品封签锁定状态一致', samplesLocked, 
+      `样品数: ${batch.sampleSeals.length}, 已锁定: ${batch.sampleSeals.filter(s => s.isWitnessLocked).length}`);
+    
+    const ordersLocked = batch.inspectionOrders.every(o => o.isWitnessLocked === true);
+    logResult('所有送检单锁定状态一致', ordersLocked,
+      `送检单数: ${batch.inspectionOrders.length}, 已锁定: ${batch.inspectionOrders.filter(o => o.isWitnessLocked).length}`);
+  } catch (error) {
+    logResult('验证锁定状态一致性', false, error.message);
+  }
+
+  logStep('22', '核心测试：锁定后尝试创建新的样品封签（应该失败）');
+  try {
+    await axios.post(`${API_BASE}/sample-seals`, {
+      batchId: testLockBatchId,
+      sampleNo: 'LOCK-S002',
+      sampleName: '锁定后测试试样',
+      quantity: 2,
+      samplingPoint: '测试现场',
+      samplingDate: '2024-01-21',
+    });
+
+    logResult('锁定后创建封签应该被拒绝', false, '错误：锁定后仍能创建封签！');
+  } catch (error) {
+    const status = error.response?.status;
+    const message = error.response?.data?.message || '';
+    
+    const isRejected = status === 400 && message.includes('已被见证锁定');
+    logResult('锁定后创建封签被正确拒绝', isRejected,
+      isRejected ? `状态码: ${status}, 消息: ${message}` : `意外响应: 状态${status}`);
+  }
+
+  logStep('23', '核心测试：锁定后尝试创建送检委托（应该失败）');
+  try {
+    await axios.post(`${API_BASE}/inspection-orders`, {
+      batchId: testLockBatchId,
+      testingOrg: '市建筑材料检测中心',
+      testingItems: ['强度检测'],
+      sampleSealIds: [],
+    });
+
+    logResult('锁定后创建送检单应该被拒绝', false, '错误：锁定后仍能创建送检单！');
+  } catch (error) {
+    const status = error.response?.status;
+    const message = error.response?.data?.message || '';
+    
+    const isRejected = status === 400 && message.includes('已被见证锁定');
+    logResult('锁定后创建送检单被正确拒绝', isRejected,
+      isRejected ? `状态码: ${status}, 消息: ${message}` : `意外响应: 状态${status}`);
+  }
+
+  logStep('24', '核心测试：没有见证照片的批次尝试锁定（应该失败）');
+  try {
+    const noPhotoBatch = await axios.post(`${API_BASE}/batches`, {
+      batchNo: `TEST-NO-PHOTO-LOCK-${Date.now()}`,
+      materialName: '无照片锁定测试材料',
+      materialType: '测试类型',
+      specification: '规格1',
+      quantity: 10,
+      unit: '吨',
+      arrivalDate: '2024-01-22',
+      constructionSite: '测试工地',
+    });
+
+    testNoPhotoBatchId = noPhotoBatch.data.id;
+    logResult('创建无照片测试批次成功', true, `批次ID: ${testNoPhotoBatchId}`);
+
+    try {
+      await axios.post(`${API_BASE}/batches/${testNoPhotoBatchId}/witness-lock`, {
+        reason: '测试无照片锁定',
+      });
+      logResult('无见证照片的锁定应该被拒绝', false, '错误：接受了无见证照片的锁定！');
+    } catch (lockError) {
+      const isRejected = lockError.response?.status === 400 && 
+        lockError.response?.data?.message?.includes('监理见证照片');
+      logResult('无见证照片的锁定被正确拒绝', isRejected,
+        isRejected ? '业务规则生效：没有监理见证照片不得见证锁定' : '意外错误');
+    }
+  } catch (error) {
+    logResult('创建无照片测试批次', false, error.response?.data?.message || error.message);
+  }
+
+  logStep('25', '核心测试：执行见证撤锁');
+  try {
+    const res = await axios.post(`${API_BASE}/batches/${testLockBatchId}/witness-unlock`, {
+      reason: '测试撤锁功能，样品信息需要修改',
+    });
+
+    logResult('见证撤锁成功', true, `锁定状态: ${res.data.data.isWitnessLocked}`);
+    logResult('批次撤锁状态正确', res.data.data.isWitnessLocked === false, '');
+    logResult('撤锁人已记录', res.data.data.witnessUnlockedBy != null, '');
+    logResult('撤锁时间已记录', res.data.data.witnessUnlockedAt != null, '');
+    logResult('撤锁原因已记录', res.data.data.witnessUnlockReason != null, '');
+  } catch (error) {
+    logResult('见证撤锁', false, error.response?.data?.message || error.message);
+  }
+
+  logStep('26', '核心测试：撤锁后验证可以正常创建封签');
+  try {
+    const res = await axios.post(`${API_BASE}/sample-seals`, {
+      batchId: testLockBatchId,
+      sampleNo: 'LOCK-S002',
+      sampleName: '撤锁后测试试样',
+      quantity: 2,
+      samplingPoint: '测试现场',
+      samplingDate: '2024-01-21',
+    });
+
+    logResult('撤锁后创建封签成功', true, `封签ID: ${res.data.data.id}`);
+  } catch (error) {
+    logResult('撤锁后创建封签', false, error.response?.data?.message || error.message);
+  }
+
+  logStep('27', '验证：见证锁定/撤锁操作日志已记录');
+  try {
+    const res = await axios.get(`${API_BASE}/operation-logs?batchId=${testLockBatchId}`);
+    const logs = res.data.data;
+    const operations = logs.map(l => l.operation);
+    
+    logResult('操作日志已记录', logs.length > 0, `共 ${logs.length} 条操作记录`);
+    logResult('包含见证锁定操作', operations.includes('WITNESS_LOCK'), '');
+    logResult('包含见证撤锁操作', operations.includes('WITNESS_UNLOCK'), '');
+  } catch (error) {
+    logResult('查询锁定操作日志', false, error.message);
+  }
+
   console.log('\n');
   console.log('═'.repeat(60));
   console.log('                          测试结果汇总');
@@ -300,6 +521,10 @@ async function runAcceptanceTests() {
     console.log('\n核心业务规则验证：');
     console.log('  ✓ 同一批次下样品号不能重复');
     console.log('  ✓ 没有监理见证照片不得送检');
+    console.log('  ✓ 没有监理见证照片不得见证锁定');
+    console.log('  ✓ 见证锁定后冻结样品号、封签照片和送检委托');
+    console.log('  ✓ 锁定状态与批次、样品编号、送检单一致');
+    console.log('  ✓ 撤锁需填写原因并恢复正常操作');
     console.log('  ✓ 报告不合格时自动生成整改复检单');
     console.log('  ✓ 整改未关闭前批次不能归档');
     console.log('  ✓ 所有操作留痕可追溯');

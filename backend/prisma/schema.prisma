@@ -69,6 +69,13 @@ model MaterialBatch {
   status         BatchStatus   @default(DRAFT)
   isArchived     Boolean       @default(false)
   materialList   Json?
+  isWitnessLocked Boolean      @default(false)
+  witnessLockedBy String?
+  witnessLockedAt DateTime?
+  witnessLockReason String?
+  witnessUnlockReason String?
+  witnessUnlockedBy String?
+  witnessUnlockedAt DateTime?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
@@ -107,6 +114,8 @@ model SampleSeal {
   status         SampleSealStatus @default(CREATED)
   sealedBy       String?
   sealDate       DateTime?
+  isWitnessLocked Boolean        @default(false)
+  witnessLockedAt DateTime?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 
@@ -127,6 +136,8 @@ model InspectionOrder {
   status         String
   receivedDate   DateTime?
   receivedBy     String?
+  isWitnessLocked Boolean  @default(false)
+  witnessLockedAt DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

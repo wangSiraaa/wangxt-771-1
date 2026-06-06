@@ -92,6 +92,13 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: '批次不存在' });
     }
 
+    if (batch.isWitnessLocked) {
+      return res.status(400).json({
+        success: false,
+        message: '该批次已被见证锁定，无法创建新的送检委托',
+      });
+    }
+
     const hasWitnessWithPhotos = batch.witnessRecords.some(
       (w) => w.sitePhotos && w.sitePhotos.length > 0
     );

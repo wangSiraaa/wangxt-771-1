@@ -13,6 +13,13 @@ export interface MaterialBatch {
   status: BatchStatus;
   isArchived: boolean;
   materialList?: any;
+  isWitnessLocked: boolean;
+  witnessLockedBy?: string;
+  witnessLockedAt?: string;
+  witnessLockReason?: string;
+  witnessUnlockReason?: string;
+  witnessUnlockedBy?: string;
+  witnessUnlockedAt?: string;
   createdAt: string;
   updatedAt: string;
   witnessRecords?: WitnessRecord[];
@@ -49,6 +56,8 @@ export interface SampleSeal {
   status: SampleSealStatus;
   sealedBy?: string;
   sealDate?: string;
+  isWitnessLocked: boolean;
+  witnessLockedAt?: string;
   createdAt: string;
 }
 
@@ -65,6 +74,8 @@ export interface InspectionOrder {
   status: string;
   receivedDate?: string;
   receivedBy?: string;
+  isWitnessLocked: boolean;
+  witnessLockedAt?: string;
   createdAt: string;
   items?: InspectionOrderItem[];
   reports?: TestReport[];
