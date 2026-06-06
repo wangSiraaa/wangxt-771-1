@@ -1,0 +1,198 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CONSTRUCTION_COMPANY
+  SUPERVISION
+  TESTING_ORG
+}
+
+enum BatchStatus {
+  DRAFT
+  WITNESSED
+  SUBMITTED
+  TESTED
+  RECTIFICATION
+  ARCHIVED
+  REJECTED
+}
+
+enum SampleSealStatus {
+  CREATED
+  SUBMITTED
+  RECEIVED
+  TESTED
+}
+
+enum ReportResult {
+  PASS
+  FAIL
+  PENDING
+}
+
+enum RectificationStatus {
+  OPEN
+  IN_PROGRESS
+  CLOSED
+  REINSPECTED
+}
+
+model User {
+  id        String   @id @default(uuid())
+  username  String   @unique
+  password  String
+  name      String
+  role      UserRole
+  orgName   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model MaterialBatch {
+  id             String        @id @default(uuid())
+  batchNo        String        @unique
+  materialName   String
+  materialType   String
+  specification  String
+  quantity       Int
+  unit           String
+  supplier       String?
+  arrivalDate    DateTime
+  constructionSite String
+  createdBy      String
+  status         BatchStatus   @default(DRAFT)
+  isArchived     Boolean       @default(false)
+  materialList   Json?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  witnessRecords WitnessRecord[]
+  sampleSeals    SampleSeal[]
+  inspectionOrders InspectionOrder[]
+  rectifications Rectification[]
+  operationLogs  OperationLog[]
+}
+
+model WitnessRecord {
+  id             String   @id @default(uuid())
+  batchId        String
+  witnessDate    DateTime
+  witnessBy      String
+  witnessName    String
+  sitePhotos     String[]
+  remarks        String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  batch          MaterialBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+}
+
+model SampleSeal {
+  id             String          @id @default(uuid())
+  batchId        String
+  sampleNo       String
+  sealNo         String          @unique
+  sampleName     String
+  specification  String?
+  quantity       Int
+  samplingPoint  String?
+  sampledBy      String
+  samplingDate   DateTime
+  status         SampleSealStatus @default(CREATED)
+  sealedBy       String?
+  sealDate       DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  batch          MaterialBatch   @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  inspectionOrderItems InspectionOrderItem[]
+
+  @@unique([batchId, sampleNo])
+}
+
+model InspectionOrder {
+  id             String   @id @default(uuid())
+  orderNo        String   @unique
+  batchId        String
+  submitDate     DateTime
+  submittedBy    String
+  testingOrg     String
+  testingItems   String[]
+  status         String
+  receivedDate   DateTime?
+  receivedBy     String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  batch          MaterialBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  items          InspectionOrderItem[]
+  reports        TestReport[]
+}
+
+model InspectionOrderItem {
+  id               String   @id @default(uuid())
+  inspectionOrderId String
+  sampleSealId     String
+  testingItems     String[]
+  createdAt        DateTime @default(now())
+
+  inspectionOrder  InspectionOrder @relation(fields: [inspectionOrderId], references: [id], onDelete: Cascade)
+  sampleSeal       SampleSeal      @relation(fields: [sampleSealId], references: [id])
+}
+
+model TestReport {
+  id             String       @id @default(uuid())
+  reportNo       String       @unique
+  inspectionOrderId String
+  testDate       DateTime
+  testedBy       String
+  result         ReportResult @default(PENDING)
+  conclusion     String
+  reportFile     String?
+  testItems      Json?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  inspectionOrder InspectionOrder @relation(fields: [inspectionOrderId], references: [id], onDelete: Cascade)
+  rectifications   Rectification[]
+}
+
+model Rectification {
+  id             String              @id @default(uuid())
+  batchId        String
+  reportId       String
+  title          String
+  description    String
+  rectificationMeasures String?
+  deadline       DateTime?
+  status         RectificationStatus @default(OPEN)
+  createdBy      String
+  closedBy       String?
+  closedAt       DateTime?
+  reInspectionReportId String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  batch          MaterialBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  report         TestReport    @relation(fields: [reportId], references: [id])
+}
+
+model OperationLog {
+  id             String   @id @default(uuid())
+  batchId        String?
+  operation      String
+  operator       String
+  operatorName   String
+  operatorRole   UserRole
+  details        Json?
+  ipAddress      String?
+  createdAt      DateTime @default(now())
+
+  batch          MaterialBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
+}
