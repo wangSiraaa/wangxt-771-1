@@ -131,7 +131,7 @@ export default function AbnormalBatches() {
                     <td><strong>{batch.batchNo}</strong></td>
                     <td>{batch.materialName}</td>
                     <td>{batch.specification}</td>
-                    <td>{new Date(batch.entryDate).toLocaleDateString()}</td>
+                    <td>{new Date(batch.arrivalDate).toLocaleDateString()}</td>
                     <td>
                       <span className={`status-tag status-${batch.status}`}>
                         {batch.status === 'RECTIFICATION' ? '整改中' :
@@ -140,14 +140,14 @@ export default function AbnormalBatches() {
                     </td>
                     <td>
                       <span className="tag" style={{ background: '#fff2e8', color: '#fa8c16' }}>
-                        {batch._count?.rectifications || 0} 项整改
+                        {(batch.rectifications?.length || 0)} 项整改
                       </span>
                     </td>
                     <td>
                       <button className="link-btn" onClick={() => handleViewDetail(batch.id)}>
                         查看详情
                       </button>
-                      {(batch.status === 'RECTIFICATION' || (batch._count?.rectifications || 0) > 0) && (
+                      {(batch.status === 'RECTIFICATION' || ((batch.rectifications?.length || 0)) > 0) && (
                         <button className="link-btn" onClick={() => handleViewRectification(batch)}>
                           处理整改
                         </button>
@@ -229,10 +229,10 @@ export default function AbnormalBatches() {
                     <div key={rect.id} className="card" style={{ marginBottom: 8, background: '#f6ffed' }}>
                       <div style={{ fontWeight: 600, marginBottom: 4 }}>{rect.title}</div>
                       <div style={{ fontSize: 13, color: '#666', marginBottom: 4 }}>
-                        整改措施：{rect.rectificationMethod}
+                        整改措施：{rect.rectificationMeasures}
                       </div>
                       <div style={{ fontSize: 12, color: '#999' }}>
-                        完成时间：{rect.completedDate ? new Date(rect.completedDate).toLocaleDateString() : '-'}
+                        完成时间：{rect.closedAt ? new Date(rect.closedAt).toLocaleDateString() : '-'}
                       </div>
                     </div>
                   ))}

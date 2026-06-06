@@ -141,7 +141,7 @@ export default function BatchDetail() {
             ← 返回
           </button>
           <span className="page-title">批次详情 - {batch.batchNo}</span>
-          <span className={`status-tag status-${batch.status}` style={{ marginLeft: 12 }}>
+          <span className={"status-tag status-" + batch.status} style={{ marginLeft: 12 }}>
             {statusMap[batch.status]}
           </span>
         </div>
@@ -151,7 +151,7 @@ export default function BatchDetail() {
               创建封签
             </button>
           )}
-          {!batch.isArchived && batch.status === 'TESTED' && batch.rectifications?.every(r => r.status === 'CLOSED') && (
+          {!batch.isArchived && batch.status === 'TESTED' && (!batch.rectifications || batch.rectifications.every(r => r.status === 'CLOSED')) && (
             <button className="btn btn-success" onClick={handleArchive} style={{ marginRight: 8 }}>
               归档批次
             </button>
